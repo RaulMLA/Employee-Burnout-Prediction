@@ -1,1 +1,3 @@
-# Grupo13-Practica2
+# Práctica 2 Aprendizaje Automático: Predicción del abandono (burnout) de empleados
+
+El objetivo de este segundo trabajo es la construcción de modelos con diversos preprocesos. El tema es el desgaste de empleados: una empresa está preocupada por el nivel de desgaste de los empleados y le gustaría crear un modelo que prediga si es probable que los empleados abandonen la empresa, usando un conjunto de datos recopilados por el departamento de recursos humanos.
