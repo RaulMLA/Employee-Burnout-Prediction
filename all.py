@@ -164,7 +164,7 @@ X_test
 from sklearn.linear_model import LogisticRegression
 
 # Creamos el modelo.
-model = LogisticRegression(random_state=13, solver='liblinear')
+model = LogisticRegression(random_state=13, solver='liblinear', class_weight='balanced')
 
 # Lo entrenamos.
 model.fit(X_train, y_train)
@@ -193,7 +193,7 @@ from sklearn.ensemble import AdaBoostClassifier, GradientBoostingClassifier, His
 
 # Librerias externas (extra).
 from xgboost import XGBClassifier
-from lightgbm import LGBMClassifier
+#from lightgbm import LGBMClassifier
 
 # Importamos time.
 import time
@@ -203,7 +203,7 @@ modelos = {
     'AdaBoost': AdaBoostClassifier(random_state=13),
     'Gradient Boosting': GradientBoostingClassifier(random_state=13),
     'XGBoost': XGBClassifier(random_state=13),
-    'LightGBM': LGBMClassifier(random_state=13, class_weight='balanced'),
+    #'LightGBM': LGBMClassifier(random_state=13, class_weight='balanced'),
 }
 
 
@@ -363,22 +363,98 @@ from sklearn.feature_selection import f_classif, mutual_info_classif, chi2
 # Importamos SelectKBest.
 from sklearn.feature_selection import SelectKBest
 
-# Creamos un selector de características usando f_classif.
-selector = SelectKBest(score_func=f_classif, k=10)
+def evaluar_modelos_seleccion_caracteristicas_LR(metrica):
+    # Creamos un selector de características usando metrica.
+    selector = SelectKBest(score_func=metrica, k=10)
 
-# Aplicamos el selector sobre los datos de entrenamiento y prueba.
-X_train_sel = selector.fit_transform(X_train, y_train)
-X_test_sel = selector.transform(X_test)
+    # Aplicamos el selector sobre los datos de entrenamiento y prueba.
+    X_train_sel = selector.fit_transform(X_train, y_train)
+    X_test_sel = selector.transform(X_test)
 
-# Creamos un modelo de Regresión Logística y lo entrenamos con las características seleccionadas.
-modelo = LogisticRegression()
+    # Obtener los puntajes de cada atributo.
+    scores = selector.scores_
 
-start = time.time()
-modelo.fit(X_train_sel, y_train)
-end = time.time()
-tiempo = end - start
+    # Crear una lista de tuplas que empareje cada nombre de atributo con su puntaje.
+    features_scores = list(zip(df.columns, scores))
 
-# Evaluamos el modelo con las características seleccionadas.
-score = modelo.score(X_test_sel, y_test)
-print(f'Accuracy con las características seleccionadas: {score}')
-print(f'Tiempo de ejecución: {tiempo:.5f} segundos')
+    # Ordenar la lista de mayor a menor según los puntajes.
+    features_scores = sorted(features_scores, key=lambda x: x[1], reverse=True)
+
+    # Imprimir los 5 atributos más importantes según metrica.
+    top_features = [feature[0] for feature in features_scores[:5]]
+    print("Top 5 atributos más importantes:")
+    for feature in top_features:
+      print(feature)
+
+    # Creamos un modelo de Regresión Logística y lo entrenamos con las características seleccionadas.
+    modelo = LogisticRegression(random_state=13, solver='liblinear', class_weight='balanced')
+
+    start = time.time()
+    modelo.fit(X_train_sel, y_train)
+    end = time.time()
+    tiempo = end - start
+
+    # Evaluamos el modelo con las características seleccionadas.
+    y_pred = modelo.predict(X_test_sel)
+    balanced_accuracy = balanced_accuracy_score(y_test, y_pred)
+    print(f"Balanced accuracy con las características seleccionadas: {balanced_accuracy:.4f}")
+    print(f'Tiempo de ejecución: {tiempo:.5f} segundos')
+
+metricas = [f_classif, mutual_info_classif, chi2]
+
+for metrica in metricas:
+    print(f'\nMetrica: {metrica.__name__}')
+    evaluar_modelos_seleccion_caracteristicas_LR(metrica)
+
+
+  
+def evaluar_modelos_seleccion_caracteristicas_boost(metrica, modelo):
+    # Seleccionar el método de selección de atributos.
+    selector = SelectKBest(score_func=metrica, k=10)
+
+    # Aplicar el selector sobre los datos de entrenamiento y prueba.
+    X_train_sel = selector.fit_transform(X_train, y_train)
+    X_test_sel = selector.transform(X_test)
+
+    # Crear y entrenar un modelo de AdaBoost con las características seleccionadas.
+    modelo.fit(X_train_sel, y_train)
+
+    # Evaluar el modelo con las características seleccionadas.
+    score = modelo.score(X_test_sel, y_test)
+
+    # Obtener los puntajes de importancia de características y ordenarlos de mayor a menor.
+    scores = selector.scores_
+    feature_scores = list(zip(df.columns, scores))
+    feature_scores = sorted(feature_scores, key=lambda x: x[1], reverse=True)
+
+    # Imprimir los 5 atributos más importantes según f_classif.
+    print(f'5 atributos más importantes:')
+    for feature, score in feature_scores[:5]:
+        print(f'{feature}: {score:.2f}')
+
+    start = time.time()
+    modelo.fit(X_train_sel, y_train)
+    end = time.time()
+    tiempo = end - start
+
+    # Evaluar el modelo con las características seleccionadas.
+    y_pred = modelo.predict(X_test_sel)
+    balanced_accuracy = balanced_accuracy_score(y_test, y_pred)
+    print(f"Balanced accuracy con las características seleccionadas: {balanced_accuracy:.4f}")
+    print(f'Tiempo de ejecución: {tiempo:.5f} segundos')
+
+
+modelos = {
+    AdaBoostClassifier(random_state=13),
+    GradientBoostingClassifier(random_state=13),
+    XGBClassifier(random_state=13),
+    #'LightGBM': LGBMClassifier(random_state=13, class_weight='balanced'),
+}
+
+metricas = [f_classif, mutual_info_classif, chi2]
+
+for modelo in modelos:
+    print(f'\nModelo: {type(modelo).__name__}')
+    for metrica in metricas:
+        print(f'\nMetrica: {metrica.__name__}')
+        evaluar_modelos_seleccion_caracteristicas_boost(metrica, modelo)
