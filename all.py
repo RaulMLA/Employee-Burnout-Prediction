@@ -161,6 +161,30 @@ X_train
 X_test
 
 
+from sklearn.dummy import DummyClassifier
+
+# Crear un clasificador dummy que prediga siempre la clase mayoritaria
+dummy = DummyClassifier(strategy='most_frequent')
+
+# Entrenar el clasificador
+dummy.fit(X_train, y_train)
+
+# Predecir valores para el conjunto de test
+y_pred = dummy.predict(X_test)
+
+# Usaremos las métricas balanced_accuracy_score, f1 y matríz de confusión.
+from sklearn.metrics import balanced_accuracy_score, f1_score, confusion_matrix
+
+# Calculamos las métricas.
+balanced_accuracy = balanced_accuracy_score(y_test, y_pred)
+f1 = f1_score(y_test, y_pred)
+#confusion_matrix = confusion_matrix(y_test, y_pred)
+
+print(f'Balanced accuracy: {balanced_accuracy:.4f}')
+print(f'F1: {f1:.4f}')
+#print(f'Confusion matrix:\n{confusion_matrix}')
+
+
 from sklearn.linear_model import LogisticRegression
 
 # Creamos el modelo.
@@ -171,9 +195,6 @@ model.fit(X_train, y_train)
 
 # Predecimos sobre el conjunto de test.
 y_pred = model.predict(X_test)
-
-# Usaremos las métricas balanced_accuracy_score, f1 y matríz de confusión.
-from sklearn.metrics import balanced_accuracy_score, f1_score, confusion_matrix
 
 # Calculamos las métricas.
 balanced_accuracy = balanced_accuracy_score(y_test, y_pred)
@@ -290,6 +311,8 @@ parametros = {
     }
 }
 
+modelos_ajustados = {}
+
 # Creamos una función para evaluar y ajustar los modelos.
 def ajustar_evaluar_modelos(modelos, parametros, X_train, y_train, X_test, y_test, cv):
     # Creamos un diccionario para guardar los resultados.
@@ -319,9 +342,7 @@ def ajustar_evaluar_modelos(modelos, parametros, X_train, y_train, X_test, y_tes
         start = time.time()
         grid.fit(X_train, y_train)
         end = time.time()
-        tiempo = end - start
-        
-        
+        tiempo = end - start     
 
         # Predecimos sobre el conjunto de test.
         y_pred = grid.predict(X_test)
@@ -335,6 +356,7 @@ def ajustar_evaluar_modelos(modelos, parametros, X_train, y_train, X_test, y_tes
         resultados[nombre_modelo] = {
             'tiempo': tiempo,
             'model': grid.best_estimator_,
+            'best_params': grid.best_params_,
             'balanced_accuracy': balanced_accuracy,
             'f1': f1
             #'confusion_matrix': conf_matrix
@@ -348,15 +370,17 @@ resultados_ajuste = ajustar_evaluar_modelos(modelos, parametros, X_train, y_trai
 # Mostramos los resultados.
 for nombre_modelo, resultado in resultados_ajuste.items():
     print(f'\nModelo: {nombre_modelo}')
+    print(f'Parámetros: {resultado["best_params"]}')
     print(f'Tiempo de ejecución: {resultado["tiempo"]:.5f} segundos')
     print(f'Balanced accuracy: {resultado["balanced_accuracy"]:.4f}')
     print(f'F1: {resultado["f1"]:.4f}')
     #print(f'Confusion matrix:\n{resultado['confusion_matrix']}')
 
 
-
-
-
+modelos_ajustados=[AdaBoostClassifier(random_state=13, learning_rate=1.0, n_estimators=200),
+                   GradientBoostingClassifier(random_state=13, learning_rate=0.5, max_depth=5, n_estimators=200),
+                    XGBClassifier(random_state=13, learning_rate=0.5, max_depth=7, n_estimators=200)#,LGBMClassifier(random_state=13, learning_rate=0.1, max_depth=7, n_estimators=200, class_weight='balanced')
+                    ]
 # Importamos f_classif, mutual_info_classif y chi2.
 from sklearn.feature_selection import f_classif, mutual_info_classif, chi2
 
@@ -428,9 +452,10 @@ def evaluar_modelos_seleccion_caracteristicas_boost(metrica, modelo):
     feature_scores = sorted(feature_scores, key=lambda x: x[1], reverse=True)
 
     # Imprimir los 5 atributos más importantes según f_classif.
-    print(f'5 atributos más importantes:')
-    for feature, score in feature_scores[:5]:
-        print(f'{feature}: {score:.2f}')
+    top_features = [feature[0] for feature in feature_scores[:5]]
+    print("Top 5 atributos más importantes:")
+    for feature in top_features:
+      print(feature)
 
     start = time.time()
     modelo.fit(X_train_sel, y_train)
@@ -443,17 +468,17 @@ def evaluar_modelos_seleccion_caracteristicas_boost(metrica, modelo):
     print(f"Balanced accuracy con las características seleccionadas: {balanced_accuracy:.4f}")
     print(f'Tiempo de ejecución: {tiempo:.5f} segundos')
 
-
-modelos = {
-    AdaBoostClassifier(random_state=13),
-    GradientBoostingClassifier(random_state=13),
-    XGBClassifier(random_state=13),
-    #'LightGBM': LGBMClassifier(random_state=13, class_weight='balanced'),
-}
-
 metricas = [f_classif, mutual_info_classif, chi2]
 
-for modelo in modelos:
+print("Boosting sin ajustar")
+for modelo in modelos.values():
+    print(f'\nModelo: {type(modelo).__name__}')
+    for metrica in metricas:
+        print(f'\nMetrica: {metrica.__name__}')
+        evaluar_modelos_seleccion_caracteristicas_boost(metrica, modelo)
+
+print("Boosting ajustado")
+for modelo in modelos_ajustados:
     print(f'\nModelo: {type(modelo).__name__}')
     for metrica in metricas:
         print(f'\nMetrica: {metrica.__name__}')
