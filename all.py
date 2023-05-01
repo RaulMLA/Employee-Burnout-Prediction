@@ -162,13 +162,19 @@ X_train
 X_test
 
 
+
+
+
 from sklearn.dummy import DummyClassifier
 
 # Crear un clasificador dummy que prediga siempre la clase mayoritaria
 dummy = DummyClassifier(strategy='most_frequent')
 
 # Entrenar el clasificador
+start = time.time()
 dummy.fit(X_train, y_train)
+end = time.time()
+tiempo_dummy = end - start
 
 # Predecir valores para el conjunto de test
 y_pred = dummy.predict(X_test)
@@ -182,9 +188,13 @@ f1_dummy = f1_score(y_test, y_pred)
 confusion_matrix_dummy = confusion_matrix(y_test, y_pred)
 
 print('\n[bold yellow]Dummy classifier (most frequent class)[/bold yellow]')
+print(f'Tiempo de entrenamiento: {tiempo_dummy:.4f} segundos')
 print(f'Balanced accuracy: {balanced_accuracy_dummy:.4f}')
 print(f'F1: {f1_dummy:.4f}')
 print(f'Confusion matrix:\n{confusion_matrix_dummy}')
+
+
+
 
 
 from sklearn.linear_model import LogisticRegression
@@ -193,7 +203,10 @@ from sklearn.linear_model import LogisticRegression
 model = LogisticRegression(random_state=13, solver='liblinear', class_weight='balanced')
 
 # Lo entrenamos.
+start = time.time()
 model.fit(X_train, y_train)
+end = time.time()
+tiempo = end - start
 
 # Predecimos sobre el conjunto de test.
 y_pred = model.predict(X_test)
@@ -204,9 +217,21 @@ f1 = f1_score(y_test, y_pred)
 conf_matrix = confusion_matrix(y_test, y_pred)
 
 print('\n[bold yellow]Logistic regression[/bold yellow]')
+print(f'Tiempo de entrenamiento: {tiempo:.4f} segundos.')
 print(f'Balanced accuracy: {balanced_accuracy:.4f}')
 print(f'F1: {f1:.4f}')
 print(f'Confusion matrix:\n{conf_matrix}')
+
+
+
+
+
+# Speedup de LogisticRegression vs DummyClassifier.
+print('\n[bold yellow]Ratios entre LogisticRegression y DummyClassifier[/bold yellow]')
+print(f'Ratio Tiempo de entrenamiento {nombre_modelo} / dummy: {tiempo_dummy / resultado["tiempo"]:.4f}')
+print(f'Ratio Balanced accuracy {nombre_modelo} / dummy: {balanced_accuracy_dummy / resultado["balanced_accuracy"]:.4f}')
+print(f'Ratio F1 {nombre_modelo} / dummy: {f1_dummy / resultado["f1"]:.4f}')
+print(f'Ratio Confusion matrix {nombre_modelo} / dummy:\n{confusion_matrix_dummy / resultado["confusion_matrix"]}')
 
 
 
@@ -277,6 +302,18 @@ for nombre_modelo, resultado in resultados.items():
     print(f'Balanced accuracy: {resultado["balanced_accuracy"]:.4f}')
     print(f'F1: {resultado["f1"]:.4f}')
     print(f'Confusion matrix:\n{resultado["confusion_matrix"]}\n')
+
+
+
+
+
+# Speedup del modelo vs dummy.
+for nombre_modelo, resultado in resultados.items():
+    print(f'\nRatio Tiempo de entrenamiento {nombre_modelo} / dummy: {tiempo_dummy / resultado["tiempo"]:.4f}')
+    print(f'Ratio Balanced accuracy {nombre_modelo} / dummy: {balanced_accuracy_dummy / resultado["balanced_accuracy"]:.4f}')
+    print(f'Ratio F1 {nombre_modelo} / dummy: {f1_dummy / resultado["f1"]:.4f}')
+    print(f'Ratio Confusion matrix {nombre_modelo} / dummy:\n{confusion_matrix_dummy / resultado["confusion_matrix"]}')
+    
 
 
 
@@ -495,14 +532,14 @@ metricas = [f_classif, mutual_info_classif, chi2]
 
 print("\n[bold red]Boosting sin ajustar[/bold red]")
 for modelo in modelos.values():
-    print(f'\nModelo: {type(modelo).__name__}')
+    print(f'\n\n[purple]Modelo:[/purple] [bold purple]{type(modelo).__name__}[/bold purple]')
     for metrica in metricas:
         print(f'\n\n[blue]Metrica:[/blue] [bold blue]{metrica.__name__}[/bold blue]')
         evaluar_modelos_seleccion_caracteristicas_boost(metrica, modelo)
 
 print("\n[bold red]Boosting ajustado[/bold red]")
 for modelo in modelos_ajustados:
-    print(f'\nModelo: {type(modelo).__name__}')
+    print(f'\n\n[purple]Modelo:[/purple] [bold purple]{type(modelo).__name__}[/bold purple]')
     for metrica in metricas:
         print(f'\n\n[blue]Metrica:[/blue] [bold blue]{metrica.__name__}[/bold blue]')
         evaluar_modelos_seleccion_caracteristicas_boost(metrica, modelo)
