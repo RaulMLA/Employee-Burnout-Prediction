@@ -1,8 +1,14 @@
 import numpy as np
 import pandas as pd
 
+import time
+
 import pickle
 from rich import print
+
+
+from sklearn.preprocessing import MinMaxScaler
+
 
 # Datos disponibles.
 with open('attrition_available_13.pkl', 'rb') as f:
@@ -228,10 +234,10 @@ print(f'Confusion matrix:\n{conf_matrix}')
 
 # Speedup de LogisticRegression vs DummyClassifier.
 print('\n[bold yellow]Ratios entre LogisticRegression y DummyClassifier[/bold yellow]')
-print(f'Ratio Tiempo de entrenamiento {nombre_modelo} / dummy: {tiempo_dummy / resultado["tiempo"]:.4f}')
-print(f'Ratio Balanced accuracy {nombre_modelo} / dummy: {balanced_accuracy_dummy / resultado["balanced_accuracy"]:.4f}')
-print(f'Ratio F1 {nombre_modelo} / dummy: {f1_dummy / resultado["f1"]:.4f}')
-print(f'Ratio Confusion matrix {nombre_modelo} / dummy:\n{confusion_matrix_dummy / resultado["confusion_matrix"]}')
+print(f'Ratio Tiempo de entrenamiento LogisticRegression / dummy: {tiempo_dummy / tiempo:.4f}')
+print(f'Ratio Balanced accuracy LogisticRegression / dummy: {balanced_accuracy_dummy / balanced_accuracy:.4f}')
+print(f'Ratio F1 LogisticRegression / dummy: {f1_dummy / f1:.4f}')
+print(f'Ratio Confusion matrix LogisticRegression / dummy:\n{confusion_matrix_dummy / conf_matrix}')
 
 
 
@@ -246,6 +252,21 @@ from lightgbm import LGBMClassifier
 
 # Importamos time.
 import time
+
+# calcular los pesos de muestra personalizados para el conjunto de entrenamiento
+class_counts = np.bincount(y_train)
+sample_weights = np.zeros(len(y_train))
+for i, count in enumerate(class_counts):
+    sample_weights[y_train == i] = class_counts.sum() / (len(class_counts) * count)
+
+# Calcular los pesos de las muestras
+weights = np.where(y_train == 0, 1 / np.sum(y_train == 0), 1 / np.sum(y_train == 1))
+
+
+# Calcular la proporción de clases
+print(np.sum(y_train == 0))
+proporcion = np.sum(y_train == 0) / np.sum(y_train == 1)
+
 
 # Creamos un diccionario con los modelos que vamos a evaluar.
 modelos = {
@@ -266,9 +287,19 @@ def evaluar_modelos(models, X_train, y_train, X_test, y_test):
         #print(f'Evaluando modelo: {nombre_modelo}')
 
         # Entrenamos el modelo.
-        start = time.time()
-        modelo.fit(X_train, y_train)
-        end = time.time()
+        if nombre_modelo == 'AdaBoost':
+            start = time.time()
+            modelo.fit(X_train, y_train, sample_weight=sample_weights)
+            end = time.time()
+        elif nombre_modelo == 'Gradient Boosting':
+            start = time.time()
+            modelo.fit(X_train, y_train, sample_weight=weights)
+            end = time.time()
+        else:
+            start = time.time()
+            modelo.fit(X_train, y_train)
+            end = time.time()
+
         tiempo = end - start
 
         # Predecimos sobre el conjunto de test.
@@ -309,14 +340,8 @@ for nombre_modelo, resultado in resultados.items():
 
 # Speedup del modelo vs dummy.
 for nombre_modelo, resultado in resultados.items():
-    print(f'\nRatio Tiempo de entrenamiento {nombre_modelo} / dummy: {tiempo_dummy / resultado["tiempo"]:.4f}')
-    print(f'Ratio Balanced accuracy {nombre_modelo} / dummy: {balanced_accuracy_dummy / resultado["balanced_accuracy"]:.4f}')
-    print(f'Ratio F1 {nombre_modelo} / dummy: {f1_dummy / resultado["f1"]:.4f}')
-    print(f'Ratio Confusion matrix {nombre_modelo} / dummy:\n{confusion_matrix_dummy / resultado["confusion_matrix"]}')
-    
-
-
-
+    print(f'\nRatio Tiempo de entrenamiento {nombre_modelo} / dummy: {resultado["tiempo"] / tiempo_dummy:.4f}')
+    print(f'Ratio Balanced accuracy {nombre_modelo} / dummy: {resultado["balanced_accuracy"] / balanced_accuracy_dummy:.4f}')
 
 
 # Importamos la clase StratifiedKFold para realizar validación cruzada estratificada.
@@ -381,9 +406,19 @@ def ajustar_evaluar_modelos(modelos, parametros, X_train, y_train, X_test, y_tes
         )
 
         # Entrenamos el modelo.
-        start = time.time()
-        grid.fit(X_train, y_train)
-        end = time.time()
+        if nombre_modelo == 'AdaBoost':
+            start = time.time()
+            grid.fit(X_train, y_train, model__sample_weight=sample_weights)
+            end = time.time()
+        elif nombre_modelo == 'Gradient Boosting':
+            start = time.time()
+            grid.fit(X_train, y_train, model__sample_weight=weights)
+            end = time.time()
+        else:
+            start = time.time()
+            grid.fit(X_train, y_train)
+            end = time.time()
+
         tiempo = end - start     
 
         # Predecimos sobre el conjunto de test.
@@ -422,6 +457,18 @@ for nombre_modelo, resultado in resultados_ajuste.items():
 
 
 
+# Speedup del modelo vs dummy.
+for nombre_modelo, resultado in resultados_ajuste.items():
+    print(f'\nRatio Tiempo de entrenamiento {nombre_modelo} / dummy: {resultado["tiempo"] / tiempo_dummy:.4f}')
+    print(f'Ratio Balanced accuracy {nombre_modelo} / dummy: {resultado["balanced_accuracy"] / balanced_accuracy_dummy:.4f}')
+
+# Speedup del modelo ajustado y sin ajustar.
+for nombre_modelo, resultado in resultados_ajuste.items():
+    print(f'\nRatio Tiempo de entrenamiento {nombre_modelo} / {nombre_modelo} sin ajustar: {resultado["tiempo"] / resultados[nombre_modelo]["tiempo"]:.4f}')
+    print(f'Ratio Balanced accuracy {nombre_modelo} / {nombre_modelo} sin ajustar: {resultado["balanced_accuracy"] / resultados[nombre_modelo]["balanced_accuracy"]:.4f}')
+    print(f'Ratio F1 {nombre_modelo} / {nombre_modelo} sin ajustar: {resultado["f1"] / resultados[nombre_modelo]["f1"]:.4f}')
+    print(f'Ratio Confusion matrix {nombre_modelo} / {nombre_modelo} sin ajustar:\n{resultado["confusion_matrix"] / resultados[nombre_modelo]["confusion_matrix"]}\n')
+
 
 
 modelos_ajustados=[AdaBoostClassifier(random_state=13, learning_rate=1.0, n_estimators=200),
@@ -441,71 +488,136 @@ from sklearn.feature_selection import f_classif, mutual_info_classif, chi2
 # Importamos SelectKBest.
 from sklearn.feature_selection import SelectKBest
 
-def evaluar_modelos_seleccion_caracteristicas_LR(metrica):
-    # Creamos un selector de características usando metrica.
-    selector = SelectKBest(score_func=metrica, k=10)
 
-    # Aplicamos el selector sobre los datos de entrenamiento y prueba.
-    X_train_sel = selector.fit_transform(X_train, y_train)
-    X_test_sel = selector.transform(X_test)
+selector = SelectKBest(score_func=f_classif, k=25)
+# Aplicamos el selector sobre los datos de entrenamiento y prueba.
+X_train_sel = selector.fit_transform(X_train, y_train)
+X_test_sel = selector.transform(X_test)
 
-    # Obtener los puntajes de cada atributo.
-    scores = selector.scores_
+# Obtener los puntajes de cada atributo.
+scores = selector.scores_
 
-    # Crear una lista de tuplas que empareje cada nombre de atributo con su puntaje.
-    features_scores = list(zip(df.columns, scores))
+# Crear una lista de tuplas que empareje cada nombre de atributo con su puntaje.
+features_scores = list(zip(df.columns, scores))
 
-    # Ordenar la lista de mayor a menor según los puntajes.
-    features_scores = sorted(features_scores, key=lambda x: x[1], reverse=True)
+# Ordenar la lista de mayor a menor según los puntajes.
+features_scores = sorted(features_scores, key=lambda x: x[1], reverse=True)
 
-    # Imprimir los 5 atributos más importantes según metrica.
-    top_features = [feature[0] for feature in features_scores[:5]]
-    print("[green]Top 5 atributos más importantes:[/green]")
-    for feature in top_features:
-      print(feature)
+# Imprimir los 5 atributos más importantes según metrica.
+top_features = [feature[0] for feature in features_scores[:5]]
+print("[green]Top 5 atributos más importantes:[/green]")
+for feature in top_features:
+    print(feature)
 
-    # Creamos un modelo de Regresión Logística y lo entrenamos con las características seleccionadas.
-    modelo = LogisticRegression(random_state=13, solver='liblinear', class_weight='balanced')
 
-    start = time.time()
-    modelo.fit(X_train_sel, y_train)
-    end = time.time()
-    tiempo = end - start
+# Creamos un modelo de Regresión Logística y lo entrenamos con las características seleccionadas.
+modelo = LogisticRegression(random_state=13, solver='liblinear', class_weight='balanced')
 
-    # Evaluamos el modelo con las características seleccionadas.
-    y_pred = modelo.predict(X_test_sel)
-    balanced_accuracy = balanced_accuracy_score(y_test, y_pred)
-    print(f"\n\nBalanced accuracy con las características seleccionadas: {balanced_accuracy:.4f}")
-    print(f'Tiempo de ejecución: {tiempo:.5f} segundos')
+start = time.time()
+modelo.fit(X_train_sel, y_train)
+end = time.time()
+tiempo_r = end - start
+
+# Evaluamos el modelo con las características seleccionadas.
+y_pred = modelo.predict(X_test_sel)
+balanced_accuracy_r = balanced_accuracy_score(y_test, y_pred)
+print(f"\n\nBalanced accuracy con las características seleccionadas: {balanced_accuracy:.4f}")
+print(f'Tiempo de ejecución: {tiempo:.5f} segundos')
+
+#ratio de tiempo de entrenamiento
+print(f'\nRatio Tiempo de entrenamiento sin reducir / reducido: {tiempo / tiempo_r:.4f}')
+
+#rattio de balanced accuracy
+print(f'\nRatio Balanced accuracy reducido / sin reducir: {balanced_accuracy_r / balanced_accuracy:.4f}')
 
 print('\n[bold yellow]Mejora de resultados LogisticRegression[/bold yellow]')
 
 metricas = [f_classif, mutual_info_classif, chi2]
 
-for metrica in metricas:
-    print(f'\n\n[blue]Metrica:[/blue] [bold blue]{metrica.__name__}[/bold blue]')
-    evaluar_modelos_seleccion_caracteristicas_LR(metrica)
+
+modelos_ajustados=[AdaBoostClassifier(random_state=13, learning_rate=0.5, n_estimators=200),
+                   GradientBoostingClassifier(random_state=13, learning_rate=0.5, max_depth=5, n_estimators=200),
+                    XGBClassifier(random_state=13, scale_pos_weight=proporcion),
+                    LGBMClassifier(random_state=13, learning_rate=0.1, max_depth=7, n_estimators=200, class_weight='balanced')
+                  ]
+
+
+
+def evaluar_modelos_seleccion_caracteristicas(modelo, metricas):
+
+    metrica_seleccionada = "f_classif"
+    k = 30
+    tuneado_seleccion = None
+        
+    for metrica in metricas:
+        selector = SelectKBest(score_func=metrica)
+        
+        pipe_selector = Pipeline([
+            ('scale', MinMaxScaler()),
+            ('select', selector),
+            ('model', modelo)
+        ])
+
+        param_grid = {"select__k": list(range(1, 46))}
+        inner = StratifiedKFold(n_splits=5)
+        tuneado = GridSearchCV(pipe_selector, param_grid, cv=inner, scoring='balanced_accuracy', n_jobs=-1, verbose=1)
+        
+        if modelo.__class__.__name__ == "AdaBoostClassifier":
+            tuneado.fit(X_train, y_train, model__sample_weight=sample_weights)
+        elif modelo.__class__.__name__ == "GradientBoostingClassifier":
+            tuneado.fit(X_train, y_train, model__sample_weight=weights)
+        else:
+            tuneado.fit(X_train, y_train)
+
+        if tuneado.best_params_['select__k'] < k:
+            k = tuneado.best_params_['select__k']
+            metrica_seleccionada = metrica.__name__
+            tuneado_seleccion = tuneado
+
+    print(modelo.__class__.__name__)
+    print(f"Mejor métrica: {metrica_seleccionada}")
+    print(f"Numero de atributos seleccionados: {k}")
+
+    import matplotlib.pyplot as plt
+    plt.plot(tuneado_seleccion.cv_results_['param_select__k'].data, tuneado_seleccion.cv_results_['mean_test_score'])
+    plt.ylabel('Balanced accuracy')
+    plt.xlabel('Number of features')
+    plt.show()
+
+print('\n[bold yellow]Mejora de resultados LogisticRegression[/bold yellow]')
+
+metricas = [f_classif, mutual_info_classif, chi2]
+
+for modelo in modelos_ajustados:
+    evaluar_modelos_seleccion_caracteristicas(modelo, metricas)
+
 
 
 
 
   
-def evaluar_modelos_seleccion_caracteristicas_boost(metrica, modelo):
-    # Seleccionar el método de selección de atributos.
-    selector = SelectKBest(score_func=metrica, k=10)
+def atributos_mas_importantes_boosting(modelo, metrica, k):
+    selector = SelectKBest(score_func=metrica, k=k)
 
     # Aplicar el selector sobre los datos de entrenamiento y prueba.
     X_train_sel = selector.fit_transform(X_train, y_train)
     X_test_sel = selector.transform(X_test)
 
-    # Crear y entrenar un modelo de AdaBoost con las características seleccionadas.
-    modelo.fit(X_train_sel, y_train)
+    # Crear y entrenar un modelo con las características seleccionadas.
+
+    if modelo.__class__.__name__ == "AdaBoostClassifier":
+        modelo.fit(X_train, y_train, sample_weight=sample_weights)
+    elif modelo.__class__.__name__ == "GradientBoostingClassifier":
+        modelo.fit(X_train_sel, y_train, sample_weight=weights)
+    else:
+        modelo.fit(X_train_sel, y_train)
 
     # Evaluar el modelo con las características seleccionadas.
     score = modelo.score(X_test_sel, y_test)
 
     # Obtener los puntajes de importancia de características y ordenarlos de mayor a menor.
     scores = selector.scores_
+    feature_scores = list(zip(X_train.columns, scores))
     feature_scores = list(zip(df.columns, scores))
     feature_scores = sorted(feature_scores, key=lambda x: x[1], reverse=True)
 
@@ -526,20 +638,53 @@ def evaluar_modelos_seleccion_caracteristicas_boost(metrica, modelo):
     print(f"\n\nBalanced accuracy con las características seleccionadas: {balanced_accuracy:.4f}")
     print(f'Tiempo de ejecución: {tiempo:.5f} segundos')
 
-print('\n[bold yellow]Mejora de resultados Boosting[/bold yellow]')
+    return balanced_accuracy, tiempo
 
-metricas = [f_classif, mutual_info_classif, chi2]
 
-print("\n[bold red]Boosting sin ajustar[/bold red]")
-for modelo in modelos.values():
-    print(f'\n\n[purple]Modelo:[/purple] [bold purple]{type(modelo).__name__}[/bold purple]')
-    for metrica in metricas:
-        print(f'\n\n[blue]Metrica:[/blue] [bold blue]{metrica.__name__}[/bold blue]')
-        evaluar_modelos_seleccion_caracteristicas_boost(metrica, modelo)
+ada = atributos_mas_importantes_boosting(AdaBoostClassifier(random_state=13, learning_rate=0.5, n_estimators=200), f_classif, 30)
+gb = atributos_mas_importantes_boosting(GradientBoostingClassifier(random_state=13, learning_rate=0.5, max_depth=5, n_estimators=200), f_classif, 30)
+xgb = atributos_mas_importantes_boosting(XGBClassifier(random_state=13, scale_pos_weight=proporcion), f_classif, 30)
+lgbm = atributos_mas_importantes_boosting(LGBMClassifier(random_state=13, learning_rate=0.1, max_depth=7, n_estimators=200, class_weight='balanced'), f_classif, 30)
 
-print("\n[bold red]Boosting ajustado[/bold red]")
-for modelo in modelos_ajustados:
-    print(f'\n\n[purple]Modelo:[/purple] [bold purple]{type(modelo).__name__}[/bold purple]')
-    for metrica in metricas:
-        print(f'\n\n[blue]Metrica:[/blue] [bold blue]{metrica.__name__}[/bold blue]')
-        evaluar_modelos_seleccion_caracteristicas_boost(metrica, modelo)
+
+#impresion de resultados
+print("AdaBoostClassifier")
+print(f"Balanced accuracy: {ada[0]:.4f}")
+print(f"Tiempo de ejecución: {ada[1]:.5f} segundos")
+
+print("\nGradientBoostingClassifier")
+print(f"Balanced accuracy: {gb[0]:.4f}")
+print(f"Tiempo de ejecución: {gb[1]:.5f} segundos")
+
+print("\nXGBClassifier")
+print(f"Balanced accuracy: {xgb[0]:.4f}")
+print(f"Tiempo de ejecución: {xgb[1]:.5f} segundos")
+
+print("\nLGBMClassifier")
+print(f"Balanced accuracy: {lgbm[0]:.4f}")
+print(f"Tiempo de ejecución: {lgbm[1]:.5f} segundos")
+
+#ratios de precision y tiempo sin y reducido
+print("\n\n[bold yellow]Ratios de precision y tiempo sin y reducido[/bold yellow]")
+#usar los resultados de resultados_ajuste
+print("AdaBoostClassifier")
+#ratio
+print(f"Ratio: {resultados_ajuste['AdaBoost']['tiempo']/ada[0]:.4f}")
+print(f"Ratio balance accuracy sin reducir / reducido: {resultados_ajuste['AdaBoost']['balanced_accuracy']/ada[1]:.4f}")
+
+print("\nGradientBoostingClassifier")
+#ratio
+print(f"Ratio: {resultados_ajuste['GradientBoosting']['tiempo']/gb[0]:.4f}")
+print(f"Ratio: {resultados_ajuste['GradientBoosting']['balanced_accuracy']/gb[1]:.4f}")
+
+print("\nXGBClassifier")
+#ratio
+print(f"Ratio: {resultados_ajuste['XGB']['tiempo']/xgb[0]:.4f}")
+print(f"Ratio: {resultados_ajuste['XGB']['balanced_accuracy']/xgb[1]:.4f}")
+
+print("\nLGBMClassifier")
+#ratio
+print(f"Ratio: {resultados_ajuste['LGBM']['tiempo']/lgbm[0]:.4f}")
+print(f"Ratio: {resultados_ajuste['LGBM']['balanced_accuracy']/lgbm[1]:.4f}")
+
+
